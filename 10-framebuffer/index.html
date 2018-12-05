@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>gl.scene</title>
+    <style>
+      body {
+          margin: 0;
+          font-family: monospace;
+      }
+      canvas {
+          display: block;
+          width: 100vw;
+          height: 100vh;
+      }
+      #b {
+        position: absolute;
+        top: 10px;
+        width: 100%;
+        text-align: center;
+        z-index: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="b">lab 10, framebuffer</div>
+  </body>
+  <script id="vs" type="notjs">#version 300 es
+    precision mediump float;
+
+    in vec3 position; 
+    in vec3 normals;
+    in vec2 texcoord;
+
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+
+    out vec3 myNormal;
+    out vec3 FragPos;
+    out vec2 v_texCoord;
+
+    void main()
+    {
+      gl_Position = projection * view * model * vec4(position, 1.0f);
+
+      myNormal = normals;
+      FragPos = vec3(model* vec4(position,1.0f));
+
+      v_texCoord = texcoord;
+    }
+  </script>
+  <script id="fs" type="notjs">#version 300 es
+    precision mediump float;
+
+    uniform vec3 lightColor;
+    uniform vec3 lightPos;
+    uniform float ambientIntensity;
+    uniform mat4 view;
+    uniform sampler2D u_DiffuseMap; 
+
+    in vec3 myNormal;
+    in vec3 FragPos;
+    in vec2 v_texCoord;
+   
+    out vec4 FragColor;
+    float specularStrength = 0.5f;
+    
+    void main()
+    {
+      vec3 diffuseColor = texture(u_DiffuseMap, v_texCoord).rgb;
+  
+      vec3 ambient = ambientIntensity * lightColor;
+  
+      vec3 norm = normalize(myNormal);
+      vec3 lightDir = normalize(lightPos - FragPos);
+      float diffImpact = max(dot(norm, lightDir), 0.0);
+      vec3 diffuseLight = diffImpact * lightColor;
+  
+      vec3 viewPos = vec3(0.0, 0.0, 0.0);
+      vec3 viewDir = normalize(viewPos - FragPos);
+      vec3 reflectDir = reflect(-lightDir, norm);
+  
+      float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+      vec3 specular = specularStrength * spec * lightColor;
+  
+      vec3 Lighting = diffuseLight + ambient + specular;
+      if(gl_FrontFacing){
+        FragColor = vec4(diffuseColor * Lighting, 1);
+      }else{
+        FragColor = vec4(diffuseColor * Lighting, 1);
+      }
+    }      
+  </script>
+  <script id="fvs" type="notjs">#version 300 es
+    precision mediump float;
+
+    in vec2 position; 
+    in vec2 texcoord;
+
+    out vec2 v_texCoord;
+
+    void main()
+    {
+      gl_Position = vec4(position, 0.0, 1.0);
+      v_texCoord = texcoord;
+    }
+  </script>
+  <script id="ffs" type="notjs">#version 300 es
+    precision mediump float;
+
+    uniform sampler2D u_DiffuseMap; 
+
+    in vec2 v_texCoord;
+   
+    out vec4 FragColor;
+    
+    void main()
+    {
+      FragColor = vec4(vec3(1.0) - texture(u_DiffuseMap, v_texCoord).rgb, 1.0);
+    }      
+  </script>
+  <script src="./../twgl-full.min.js"></script>
+  <script>
+    "use strict";
+
+    function main(image) {
+      const m4 = twgl.m4;
+      const gl = document.getElementById("c").getContext("webgl2");
+
+      // Scene constants:
+
+      const vertices = 256;
+      const offset = (vertices - 1) / 2;
+      const strips = vertices - 1;
+      const strip_length = vertices * 2;
+
+      const max_height = 255;
+      const z_compression = (max_height / vertices) * 4;
+
+      const height_multiplier = 2.5;
+      const height = (max_height * height_multiplier) / z_compression;
+
+      // Screen quad
+
+      const framebuffer_data = {
+        position: { 
+          numComponents: 2, 
+          data: [-1.0, -1.0, 
+                 -1.0,  1.0, 
+                  1.0,  1.0, 
+                  1.0, -1.0], 
+                  },
+        texcoord: [0, 0, 
+                   0, 1, 
+                   1, 1, 
+                   1, 0],
+        indices: [2, 3, 1, 0]
+      }
+
+      const frame_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, frame_texture);
+      {
+        const level = 0;
+        const internalFormat = gl.RGBA;
+        const border = 0;
+        const format = gl.RGBA;
+        const type = gl.UNSIGNED_BYTE;
+        const data = null;
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+                      gl.canvas.clientWidth, gl.canvas.clientHeight, border,
+                      format, type, data);
+      
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      }
+
+      const framebuffer = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      
+      {
+        const attachmentPoint = gl.COLOR_ATTACHMENT0;
+        const level = 0;
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, attachmentPoint, gl.TEXTURE_2D, frame_texture, level);
+      }
+
+      const depth_buffer = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, depth_buffer);
+      
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.canvas.clientWidth, gl.canvas.clientHeight);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth_buffer);
+
+      const framebuffer_shader = twgl.createProgramInfo(gl, ["fvs", "ffs"]);
+      const framebuffer_buffers = twgl.createBufferInfoFromArrays(gl, framebuffer_data);
+      const framebuffer_uniforms = {
+        u_DiffuseMap: frame_texture
+      }
+
+      // Terrain data
+      
+      const arrays = {
+        position: [],
+        normal: [],
+        texcoord: [],
+        indices: []
+      };
+
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0, image.width, image.height);
+      for(let x = 0; x < vertices; x++) {
+        for(let z = 0; z < vertices; z++) {
+          arrays.position.push(x - offset, ctx.getImageData(x, z, 1, 1).data[0] / z_compression, z - offset);
+          arrays.normal.push(0, 1, 0);
+          arrays.texcoord.push(x / (vertices - 1), z / (vertices - 1));
+        }
+      }
+
+      for (let z = 0; z < vertices - 1; z++) {  
+        if (z > 0) { arrays.indices.push(z * vertices); } // If cases form degenerate triangles
+
+        for (let x = 0; x < vertices; x++) {
+          arrays.indices.push(((z + 0) * vertices) + x);
+          arrays.indices.push(((z + 1) * vertices) + x);
+        }
+ 
+        if (z < vertices - 2) { arrays.indices.push(((z + 1) * vertices) + (vertices - 1)); }
+      }
+
+      const shader = twgl.createProgramInfo(gl, ["vs", "fs"]);
+      const buffers = twgl.createBufferInfoFromArrays(gl, arrays);
+      const tex = twgl.createTexture(gl, {
+        src: 'terrain.jpg',
+      }, on_texture_load);
+
+      function on_texture_load(err, texture, source) {
+        console.log('texture load')
+        const uniforms = {
+          model: [],
+          view: [],
+          projection: [],
+          lightColor: [.4, .4, 1],
+          lightPos: [0, height, 0],
+          ambientIntensity: 1,
+          u_DiffuseMap: texture,
+        };
+
+        function render(time) {
+          function render_terrain() {
+            time *= 0.0001;
+            twgl.resizeCanvasToDisplaySize(gl.canvas);
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+            gl.frontFace(gl.CW); // Apparently I draw triangles backwards
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.CULL_FACE);
+            gl.clearColor(.15, .15, .15, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            
+            const fov = 70 * Math.PI / 180;
+            const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+            const zNear = 0.5;
+            const zFar = (vertices + height) * 2;
+            const projection = m4.perspective(fov, aspect, zNear, zFar);
+            
+            const eye = [vertices, height * 1.5, vertices];
+            const target = [0, height / 2, 0];
+            const up = [0, 1, 0];
+            const camera = m4.lookAt(eye, target, up);
+            
+            uniforms.view = m4.inverse(camera);
+            uniforms.model = m4.rotationY(time);
+            uniforms.projection = projection;
+
+            gl.useProgram(shader.program);
+            twgl.setBuffersAndAttributes(gl, shader, buffers);
+            twgl.setUniforms(shader, uniforms);
+
+            gl.drawElements(gl.TRIANGLE_STRIP, buffers.numElements, gl.UNSIGNED_SHORT, 0);
+          }
+
+          function render_framebuffer() {
+            twgl.resizeCanvasToDisplaySize(gl.canvas);
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+            gl.clearColor(.15, .15, .15, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            
+
+            gl.useProgram(framebuffer_shader.program);
+            twgl.setBuffersAndAttributes(gl, framebuffer_shader, framebuffer_buffers);
+            twgl.setUniforms(framebuffer_shader, framebuffer_uniforms);
+
+            gl.drawElements(gl.TRIANGLE_STRIP, framebuffer_buffers.numElements, gl.UNSIGNED_SHORT, 0);
+          }
+
+          gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+          render_terrain();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          render_framebuffer();
+
+          requestAnimationFrame(render);
+        }
+        requestAnimationFrame(render);
+      }
+    }
+
+    const image = new Image;
+    image.onload = () => {
+      main(image);
+    }
+    image.src = './terrain.jpg'
+  </script>
+</html>
+

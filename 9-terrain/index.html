@@ -95,7 +95,7 @@
       }
     }      
   </script>
-  <script src="./twgl-full.min.js"></script>
+  <script src="./../twgl-full.min.js"></script>
   <script>
     "use strict";
 
@@ -155,7 +155,7 @@
       console.log(arrays)
       
       const tex = twgl.createTexture(gl, {
-        src: 'terrain.jpg',
+        src: './terrain.jpg',
       }, on_texture_load);
 
       function on_texture_load(err, texture, source) {
@@ -164,9 +164,9 @@
           model: [],
           view: [],
           projection: [],
-          lightColor: [.8, 0, .8],
+          lightColor: [.4, .4, 1],
           lightPos: [0, height, 0],
-          ambientIntensity: .9,
+          ambientIntensity: 1,
           u_DiffuseMap: texture,
         };
 
