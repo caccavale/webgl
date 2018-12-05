@@ -440,20 +440,16 @@
           gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
           render_terrain();
           render_scene_onto_screen(scenes[0]);
+          
           render_scene_onto_framebuffer(scenes[0], scenes[1].framebuffer)
           render_scene_onto_screen(scenes[1]);
+          
           render_scene_onto_framebuffer(scenes[1], scenes[2].framebuffer)
           render_scene_onto_screen(scenes[2]);
 
           render_scene_onto_framebuffer(scenes[2], scenes[3].framebuffer)
           scenes[3].uniforms.origional = scenes[1].uniforms.u_DiffuseMap
           render_scene_onto_screen(scenes[3]);
-
-          // //TODO FIX THIS BY REMOVING vvvv
-          // for(let i = 1; i < /* TODO scenes.length*/ 2; i++) {
-          //   render_scene_onto_framebuffer(scenes[i-1], scenes[i].framebuffer);
-          //   render_scene_onto_screen(scenes[i]);
-          // }
 
           requestAnimationFrame(render);
         }
